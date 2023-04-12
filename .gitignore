@@ -1,1 +1,3 @@
 .flake8
+tests/interpret.py
+__pycache__/
