@@ -45,21 +45,48 @@ class FlowControl:
             error(31)
 
         # TODO can change, normal dict should work, but I am not 100% sure
-        self.ins_dict = OrderedDict()
+        inst_dict = OrderedDict()
         for instruction in self.root:
             try:
                 order = int(instruction.attrib["order"])
-                self.ins_dict[order] = instruction
+                inst_dict[order] = instruction
             except KeyError:
                 error(32)
             except ValueError:
                 error(32)
 
+        self._index = 0
+        self._sorted_ins = list()
+        for key in sorted(inst_dict):
+            self._sorted_ins.append((key, inst_dict[key]))
+
     def print_instructions(self):
         if not self.init:
             error(99, addendum="flow control was not initialized before use")
-        for key in sorted(self.ins_dict):
-            print(f"key: {key}, value: {self.ins_dict[key]}")
+
+        for instruction in self._sorted_ins:
+            print(instruction[0], end=" ")
+            print(instruction[1].attrib["opcode"])
+
+    def next_instruction(self):
+        try:
+            ins = self._sorted_ins[self._index]
+        except IndexError:
+            error(99, addendum="no more instructions")
+
+        self._index += 1
+        return ins
+
+    def set_index(self, new_index):
+        if (len(self._sorted_ins)-1) < new_index:
+            error(99, addendum="instruction pointer index out of range")
+        self._index = new_index
+
+    def get_index(self):
+        index = self._index
+        if index < 0:
+            error(99, addendum="instruction pointer index out of range")
+        return index
 
 errlist = {
     10: "missing script parameter or use of a prohibited parameter combination",
