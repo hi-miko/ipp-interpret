@@ -6,6 +6,119 @@ from typing import NoReturn, Any
 
 VERSION = 0.2
 
+errlist = {
+    10: "missing script parameter or use of a prohibited parameter combination",
+    11: "error opening input files",
+    12: "error opening output files for writing",
+    31: "incorrect XML format in the input file",
+    32: "unexpected XML structure",
+    52: "error in semantic checks of input code in IPPcode23",
+    53: "interpretation runtime error – incorrect operand types;",
+    54: "interpretation runtime error – accessing a non-existing variable",
+    55: "interpretation runtime error – non-existing frame",
+    56: "interpretation runtime error – missing value",
+    57: "interpretation runtime error – incorrect operand value",
+    58: "interpretation runtime error – incorrect string manipulation.",
+    99: "internal error"
+}
+
+usage_dialog = """
+Usage:
+    python interpret.py --source=file
+    python interpret.py --input=file
+    python interpret.py --source=file1 --input=file2
+    python interpret.py --help
+    python interpret.py --version
+
+Flags:
+    '--source' -> Input file with XML representation of the source code
+    '--input' -> File with inputs for the interpretation of the given source code
+    '--help' -> Displays this help dialog
+    '--version' -> Displays the version of this source code
+
+Specifications:
+    - If either the 'source file' or the 'input file' is not specified then the not specified file will be read from stdin
+"""
+
+##< Function to print out the error message given an error code
+# @param errcode the given error code
+# @param fname optional argument to print where the error code happened
+def error(errcode: int, fname: str = "", addendum: str = "") -> NoReturn:
+    global errlist
+    if fname != "":
+        print(f"in function '{fname}'", file=sys.stderr)
+
+    if addendum != "":
+        print(f"{addendum}", file=sys.stderr)
+
+    print(f"Error code {errcode}: {errlist[errcode]}", file=sys.stderr)
+
+    sys.exit(errcode)
+
+class Instruction:
+    valid_types = ["var", "string", "type", "label", "int", "bool", "nil"]
+
+    def syntax_checks(self, instruction: et.Element):
+        if instruction.tag != "instruction":
+            error(32)
+
+        valid_keys = instruction.attrib.keys()
+        if len(valid_keys) != 2:
+            error(32)
+
+        if ("order" not in valid_keys) or ("opcode" not in valid_keys):
+            error(32)
+
+        arg_count = len(instruction)
+        for arg in instruction:
+            if arg.tag != f"arg{arg_count}":
+                error(32)
+
+            arg_count -= 1
+            if "type" not in arg.attrib.keys():
+                error(32)
+
+            if arg.attrib["type"] not in self.valid_types:
+                error(32)
+
+    def create_dependencies(self, instruction: et.Element):
+        self.literals = []
+        self.dependencies = []
+
+        arg_count = len(instruction)
+        for arg in instruction:
+            text = arg.text
+            attype = arg.attrib["type"]
+            if text == "":
+                error(99, addendum="expected argument at instruction")
+
+            if attype == "var":
+                self.dependencies.append(text)
+            elif attype == "type":
+                self.literals.append(text)
+            elif attype == "label":
+                self.dependencies.append(text)
+            else:
+                self.literals.append(text)
+
+            arg_count -= 1
+
+    def __init__(self, instruction: et.Element):
+        self.syntax_checks(instruction)
+        self.create_dependencies(instruction)
+        self.opcode = instruction.attrib["opcode"]
+
+    def print_instruction_info(self):
+        print(f"opcode: {self.opcode}")
+        print("Dependencies: ", end="")
+        for dependency in self.dependencies:
+            print(dependency, end=", ")
+        print()
+        print("literals: ", end="")
+        for literal in self.literals:
+            print(literal, end=", ")
+        print("\n")
+
 class Stack:
     def __init__(self):
         self.stack = []
@@ -88,56 +201,7 @@ class FlowControl:
             error(99, addendum="instruction pointer index out of range")
         return index
 
-errlist = {
-    10: "missing script parameter or use of a prohibited parameter combination",
-    11: "error opening input files",
-    12: "error opening output files for writing",
-    31: "incorrect XML format in the input file",
-    32: "unexpected XML structure",
-    52: "error in semantic checks of input code in IPPcode23",
-    53: "interpretation runtime error – incorrect operand types;",
-    54: "interpretation runtime error – accessing a non-existing variable",
-    55: "interpretation runtime error – non-existing frame",
-    56: "interpretation runtime error – missing value",
-    57: "interpretation runtime error – incorrect operand value",
-    58: "interpretation runtime error – incorrect string manipulation.",
-    99: "internal error"
-}
-
-usage_dialog = """
-Usage:
-    python interpret.py --source=file
-    python interpret.py --input=file
-    python interpret.py --source=file1 --input=file2
-    python interpret.py --help
-    python interpret.py --version
-
-Flags:
-    '--source' -> Input file with XML representation of the source code
-    '--input' -> File with inputs for the interpretation of the given source code
-    '--help' -> Displays this help dialog
-    '--version' -> Displays the version of this source code
-
-Specifications:
-    - If either the 'source file' or the 'input file' is not specified then the not specified file will be read from stdin
-"""
-
-##< Function to print out the error message given an error code
-# @param errcode the given error code
-# @param fname optional argument to print where the error code happened
-def error(errcode: int, fname: str = "", addendum: str = "") -> NoReturn:
-    global errlist
-    if fname != "":
-        print(f"in function '{fname}'", file=sys.stderr)
-
-    if addendum != "":
-        print(f"{addendum}", file=sys.stderr)
-
-    print(f"Error code {errcode}: {errlist[errcode]}", file=sys.stderr)
-
-    sys.exit(errcode)
-
-def main():
+def main() -> NoReturn:
     try:
         # written like this so we skip the first arg variable which is the name
         oplist, args = getopt.getopt(sys.argv[1:], '', ['help', 'version', 'source=', 'input='])
@@ -167,7 +231,9 @@ def main():
 
     flow = FlowControl(sfile)
     flow.initialize()
-    flow.print_instructions()
+    for instruction in flow._sorted_ins:
+        obj_ins = Instruction(instruction[1])
+        obj_ins.print_instruction_info()
 
     sys.exit(0)
 
