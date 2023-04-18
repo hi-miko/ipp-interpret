@@ -82,34 +82,25 @@ class Instruction:
                 error(32)
 
     def create_dependencies(self, instruction: et.Element):
-        self.literals = []
+        self.arg_list = []
         self.dependencies = []
-        #TODO think of a better way to do this
-        self.arg_order = ""
 
-        arg_count = len(instruction)
         for arg in instruction:
             text = arg.text
             attype = arg.attrib["type"]
             if text == "":
                 error(99, addendum="expected argument at instruction")
-
+            
             if attype == "var":
                 self.dependencies.append(text)
-                self.arg_order = self.arg_order + "d"
+                self.arg_list.append((text, attype))
             elif attype == "type":
-                self.literals.append(text)
-                self.arg_order = self.arg_order + "l"
+                self.arg_list.append((text, attype))
             elif attype == "label":
                 self.dependencies.append(text)
-                self.arg_order = self.arg_order + "d"
+                self.arg_list.append((text, attype))
             else:
-                self.literals.append(text)
-                self.arg_order = self.arg_order + "l"
-
-            arg_count -= 1
-
-        self.arg_order = self.arg_order[::-1]
+                self.arg_list.append((text, attype))
 
     def __init__(self, instruction: et.Element):
         self.syntax_checks(instruction)
@@ -117,32 +108,103 @@ class Instruction:
         self.opcode = instruction.attrib["opcode"]
 
     def print_instruction_info(self) -> None:
-        print(f"opcode: {self.opcode}\norder: {self.arg_order}")
+        print(f"opcode: {self.opcode}")
         print("Dependencies: ", end="")
         for dependency in self.dependencies:
             print(dependency, end=", ")
         print()
-        print("literals: ", end="")
-        for literal in self.literals:
+        print("instruction list: ", end="")
+        for literal in self.arg_list:
             print(literal, end=", ")
         print("\n")
 
 # a class that implements a dispatch table
 class Operations:
+    def frame_exists(self, frame: str) -> None:
+        if frame == "GF":
+            return
+        if frame == "TF":
+            if self.temporary_frame is None:
+                error(55)
+        elif frame == "LF":
+            local_frame = self.local_frame_stack.get_top()
+            if local_frame is None:
+                error(55)
+        else:
+            error(31, "frame_exists")
+
+    def dependency_check(self, instruction: Instruction) -> None:
+        for dp in instruction.dependencies:
+            frame, name = dp.split("@")
+            if frame == "GF":
+                if name not in self.global_frame.keys():
+                    error(54)
+            elif frame == "TF":
+                self.frame_exists("TF")
+                if name not in self.temporary_frame.keys():
+                    error(54)
+            elif frame == "LF":
+                self.frame_exists("LF")
+                if name not in self.local_frame_stack.get_top().keys():
+                    error(54)
+            else:
+                error(31, "dependency_check")
+
+    def check_arg_types(self, instruction: Instruction, types: str) -> None:
+        for i, arg in enumerate(instruction.arg_list):
+            if arg[1][0] != types[i]:
+                error(53)
+
+    def in_frame(self, name: str, frame: str) -> bool:
+        if frame == "GF":
+            if name in self.global_frame.keys():
+                return True
+        elif frame == "TF":
+            if name in self.temporary_frame.keys():
+                return True
+        elif frame == "LF":
+            if name in self.local_frame_stack.get_top().keys():
+                return True
+        else:
+            error(31, "in_frame")
+
+        return False
+
+    #TODO implement these lol
     def move(self, instruction: Instruction) -> None:
-        pass
+        self.dependency_check(instruction)
+        # TODO cont
 
     def createframe(self, instruction: Instruction) -> None:
-        pass
+        self.temporary_frame = {}
 
     def pushframe(self, instruction: Instruction) -> None:
-        pass
+        self.local_frame_stack.append(self.temporary_frame)
+        self.temporary_frame = None
 
     def popframe(self, instruction: Instruction) -> None:
-        pass
+        top = self.local_frame_stack.get_top()
+        if top is None:
+            error(55)
+        self.temporary_frame = top
+        self.local_frame_stack.pop()
 
     def defvar(self, instruction: Instruction) -> None:
-        pass
+        self.check_arg_types(instruction, "v")
+        frame, name = instruction.arg_list[0][0].split("@")
+        self.frame_exists(frame)
+
+        if self.in_frame(name, frame):
+            error(52)
+
+        if frame == "GF":
+            self.global_frame[name] = (None, None)
+        elif frame == "TF":
+            self.temporary_frame[name] = (None, None)
+        elif frame == "LF":
+            self.local_frame_stack.get_top()[name] = (None, None)
+        else:
+            error(31, "local_frame")
 
     def call(self, instruction: Instruction) -> None:
         pass
@@ -272,8 +334,21 @@ class Operations:
         'BREAK': (0, break_)
     }
 
-    def __init__(self):
-        print()
+    def __init__(self, instruction, flow, data_stack, local_frame_stack, global_frame, temporary_frame, label_list):
+        self.instruction = instruction
+        self.flow = flow
+        self.data_stack = data_stack
+        self.local_frame_stack = local_frame_stack
+        self.global_frame = global_frame
+        self.temporary_frame = temporary_frame
+        self.label_list = label_list
+
+    def run_instruction(self):
+        arg, fce = self.dispatch_table[self.instruction.opcode]
+        if arg != len(self.instruction.arg_list):
+            error(52)
+
+        fce(self, self.instruction)
 
 #Façade class for the whole interpret subsystem
 class Interpret:
@@ -290,10 +365,10 @@ class Interpret:
         self.flow.initialize()
 
         self.data_stack = Stack()
-        self.frame_stack = Stack()
+        self.local_frame_stack = Stack()
 
-        global_frame = {}
-        self.frame_stack.append(global_frame)
+        self.global_frame = {}
+        self.temporary_frame = None
         
         self.get_all_labels()
 
@@ -302,8 +377,9 @@ class Interpret:
 
     def interpret(self) -> None:
         while (ins := self.flow.next_instruction()) != -1:
-            #use a dispatch table
-            print(ins)
+            instruction_obj = Instruction(ins[1])
+            operation = Operations(instruction_obj, self.flow, self.data_stack, self.local_frame_stack, self.global_frame, self.temporary_frame, self.label_list)
+            operation.run_instruction()
 
     def debug(self) -> None:
         # add numbers to data stack
@@ -314,24 +390,24 @@ class Interpret:
         self.data_stack.append(20)
         
         # add local frames
-        self.frame_stack.append({})
-        self.frame_stack.append({})
-        self.frame_stack.append({})
-        self.frame_stack.append({})
-        self.frame_stack.append({})
+        self.local_frame_stack.append({})
+        self.local_frame_stack.append({})
+        self.local_frame_stack.append({})
+        self.local_frame_stack.append({})
+        self.local_frame_stack.append({})
 
     def print_everything(self) -> None:
         print(f"Input file: {self.ifile}")
         print("Data stack: ", end="")
         self.data_stack.print_stack()
         print("Frame stack: ", end="")
-        self.frame_stack.print_stack()
+        self.local_frame_stack.print_stack()
+        print("global frame: ", end="")
+        print(self.global_frame)
         print("Label list: ", end="")
         for item in self.label_list:
             print(f" [{item}]", end=" ->")
         print(" |")
-
-
 
 class Stack:
     def __init__(self):
@@ -378,9 +454,9 @@ class FlowControl:
 
         try:
             if self.root.attrib["language"] != "IPPcode23":
-                error(31)
+                error(31, "root.attrib")
         except KeyError:
-            error(31)
+            error(31, "keyerror")
 
         # TODO can change, normal dict should work, but I am not 100% sure
         inst_dict = OrderedDict()
@@ -388,9 +464,9 @@ class FlowControl:
             try:
                 order = int(instruction.attrib["order"])
                 if order in inst_dict.keys():
-                    error(31)
+                    error(31, "order1")
                 elif order <= 0:
-                    error(31)
+                    error(31, "order2")
                 inst_dict[order] = instruction
             except KeyError:
                 error(32)
@@ -467,9 +543,10 @@ def main() -> NoReturn:
         error(10)
 
     interpret = Interpret(sfile, ifile)
-    interpret.debug()
     interpret.print_everything()
-    # interpret.interpret()
+    interpret.interpret()
+    print()
+    interpret.print_everything()
 
     sys.exit(0)
 
