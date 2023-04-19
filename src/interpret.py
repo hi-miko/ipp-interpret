@@ -163,7 +163,7 @@ class Operations:
     :param local_frame_stack: A stack for holding local frames.
     :type data_stack: Stack
     :param call_stack: A stack for holding instruction indexes.
-    :type data_stack: Stack
+    :type call_stack: Stack
     :param global_frame: A dictionary that is used to hold global variables.
     :type global_frame: dict
     :param temporary_frame: A frame that is from the TemporaryFrame class.
@@ -887,7 +887,6 @@ class Operations:
         self.call_stack = call_stack
 
     def run_instruction(self):
-        # labes are skipped because they are already created at the start
         if self.instruction.opcode == "LABEL":
             return
 
@@ -953,21 +952,6 @@ class Interpret:
             instruction_obj = Instruction(ins[1])
             operation = Operations(instruction_obj, self.flow, self.data_stack, self.local_frame_stack, self.global_frame, self.temporary_frame, self.label_list, self.call_stack)
             operation.run_instruction()
-
-    def debug(self) -> None:
-        # add numbers to data stack
-        self.data_stack.append(0)
-        self.data_stack.append(5)
-        self.data_stack.append(10)
-        self.data_stack.append(5)
-        self.data_stack.append(20)
-        
-        # add local frames
-        self.local_frame_stack.append({})
-        self.local_frame_stack.append({})
-        self.local_frame_stack.append({})
-        self.local_frame_stack.append({})
-        self.local_frame_stack.append({})
 
     def print_everything(self) -> None:
         print(f"Input file: {self.ifile}")
