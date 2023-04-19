@@ -913,8 +913,8 @@ class Operations:
 class Interpret:
     '''
     A Façade style class from the Façade design pattern.
-    This class combines togeather all the other classes and uses their reasources to interpret the code.
-    This abstacts the end user from all the parts of an interpret. The only thing the have to know is how to use this class.
+    This class combines together all the other classes and uses their resources to interpret the code.
+    This abstracts the end user from all the parts of an interpret. The only thing the have to know is how to use this class.
     :param sfile: A file that holds the xml representation that needs to be interpreted.
     :type sfile: str
     :param ifile: A file that holds the user input values that can be used durring interpretation.
