@@ -44,7 +44,7 @@ It creates resources out of the other classes and passes them on as needed.
 #### Operations class
 
 This class implements 2 important things. The first one is a dispatch table, so that the program knows what methods to call when presented 
-with certain opcodes and the `run_instruction()` method, that actually calls the afformentioned method. All other methods in this class are
+with certain opcodes and the `run_instruction()` method, that actually calls the aforementioned method. All other methods in this class are
 either helper methods, used for modularity or the process methods themselves. This Class also gets all the resources created and managed
 by the Interpreter subsystem.
 
@@ -94,4 +94,4 @@ Specifications:
 
 ## UML class diagram
 
-![image located in the root directory](./Class_diagram.png)
+![image located in the root directory](./docs/Class_diagram.png)
